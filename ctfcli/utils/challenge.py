@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import hashlib
+import os
 import yaml
 
 import click
@@ -107,7 +109,12 @@ def sync_challenge(challenge):
         for f in challenge["files"]:
             file_path = Path(challenge.directory, f)
             if file_path.exists():
-                file_object = ("file", file_path.open(mode="rb"))
+                fp = file_path.open(mode="rb")
+                bytes = fp.read()
+                fp.seek(0)
+                digest = hashlib.sha256(bytes).hexdigest()
+                name, ext = os.path.splitext(file_path.name)
+                file_object = ("file", (f"{name}-{digest}{ext}", fp))
                 files.append(file_object)
             else:
                 click.secho(f"File {file_path} was not found", fg="red")
@@ -211,7 +218,12 @@ def create_challenge(challenge):
         for f in challenge["files"]:
             file_path = Path(challenge.directory, f)
             if file_path.exists():
-                file_object = ("file", file_path.open(mode="rb"))
+                fp = file_path.open(mode="rb")
+                bytes = fp.read()
+                fp.seek(0)
+                digest = hashlib.sha256(bytes).hexdigest()
+                name, ext = os.path.splitext(file_path.name)
+                file_object = ("file", (f"{name}-{digest}{ext}", fp))
                 files.append(file_object)
             else:
                 click.secho(f"File {file_path} was not found", fg="red")
