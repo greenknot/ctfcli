@@ -1,7 +1,10 @@
 from pathlib import Path
 
 import hashlib
+import io
 import os
+import re
+import tarfile
 import yaml
 
 import click
@@ -28,6 +31,31 @@ def load_challenge(path):
 def load_installed_challenges():
     s = generate_session()
     return s.get("/api/v1/challenges?view=admin", json=True).json()["data"]
+
+
+def reset_archive_owner(tarinfo):
+    tarinfo.uid = tarinfo.gid = 0
+    tarinfo.uname = tarinfo.gname = "root"
+    return tarinfo
+
+
+def create_archive(challenge):
+    fileobj = io.BytesIO()
+    with tarfile.open(mode="x:bz2", fileobj=fileobj) as tar:
+        for filename in challenge["files"]:
+            file_path = os.path.join(challenge.directory, filename)
+            if not os.path.exists(file_path):
+                click.secho(f"File {file_path} was not found", fg="red")
+                raise Exception(f"File {file_path} was not found")
+            challenge_name = re.sub(r"[^a-zA-Z0-9]", "-", challenge["name"].strip()).lower()
+            arcname = os.path.join(challenge_name, filename)
+            tar.add(file_path, arcname=arcname, filter=reset_archive_owner)
+
+    fileobj.seek(0)
+    digest = hashlib.sha1(fileobj.read()).hexdigest()
+    fileobj.seek(0)
+
+    return ("file", (f"{digest}.tar.bz2", fileobj))
 
 
 def sync_challenge(challenge):
@@ -105,21 +133,7 @@ def sync_challenge(challenge):
 
     # Upload files
     if challenge.get("files"):
-        files = []
-        for f in challenge["files"]:
-            file_path = Path(challenge.directory, f)
-            if file_path.exists():
-                fp = file_path.open(mode="rb")
-                bytes = fp.read()
-                fp.seek(0)
-                digest = hashlib.sha256(bytes).hexdigest()
-                name, ext = os.path.splitext(file_path.name)
-                file_object = ("file", (f"{name}-{digest}{ext}", fp))
-                files.append(file_object)
-            else:
-                click.secho(f"File {file_path} was not found", fg="red")
-                raise Exception(f"File {file_path} was not found")
-
+        files = [ create_archive(challenge) ]
         data = {"challenge": challenge_id, "type": "challenge"}
         # Specifically use data= here instead of json= to send multipart/form-data
         r = s.post(f"/api/v1/files", files=files, data=data)
@@ -214,21 +228,7 @@ def create_challenge(challenge):
 
     # Upload files
     if challenge.get("files"):
-        files = []
-        for f in challenge["files"]:
-            file_path = Path(challenge.directory, f)
-            if file_path.exists():
-                fp = file_path.open(mode="rb")
-                bytes = fp.read()
-                fp.seek(0)
-                digest = hashlib.sha256(bytes).hexdigest()
-                name, ext = os.path.splitext(file_path.name)
-                file_object = ("file", (f"{name}-{digest}{ext}", fp))
-                files.append(file_object)
-            else:
-                click.secho(f"File {file_path} was not found", fg="red")
-                raise Exception(f"File {file_path} was not found")
-
+        files = [ create_archive(challenge) ]
         data = {"challenge": challenge_id, "type": "challenge"}
         # Specifically use data= here instead of json= to send multipart/form-data
         r = s.post(f"/api/v1/files", files=files, data=data)
