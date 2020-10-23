@@ -44,6 +44,7 @@ def create_archive(challenge):
     with tarfile.open(mode="x:bz2", fileobj=fileobj) as tar:
         for filename in challenge["files"]:
             file_path = os.path.join(challenge.directory, filename)
+            file_path = os.path.realpath(file_path)
             if not os.path.exists(file_path):
                 click.secho(f"File {file_path} was not found", fg="red")
                 raise Exception(f"File {file_path} was not found")
